@@ -66,6 +66,11 @@ open class MainThreadActor : Actor {
     
 }
 
+open class ActorUI : Actor {
+    required public init(_ ctx: ActorSystem) {
+        super.init(ctx)
+    }
+}
 
 open class ActorRef : CustomStringConvertible {
     open let actor:Actor
