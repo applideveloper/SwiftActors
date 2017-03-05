@@ -11,23 +11,23 @@ import Foundation
 
 open class Actor {
     
-    var dispatchQueue:DispatchQueue?
+    var dispatchQueue: DispatchQueue?
     var mailbox: Array<Any>
-    var name:String
-    var busy:Bool
-    let context:ActorSystem
+    var name: String
+    var busy: Bool
+    let actorSystem: ActorSystem
     
-    required public init(_ ctx:ActorSystem) {
+    required public init(actorSystem: ActorSystem) {
         busy = false
         mailbox = Array()
         self.name = String(format: "Actor-%d-%f", arc4random(), Date.timeIntervalSinceReferenceDate)
-        context = ctx
+        self.actorSystem = actorSystem
     }
     
-    func put(_ message:Any) {
+    func put(message: Any) {
         if let dispatchQueue = self.dispatchQueue {
             dispatchQueue.async {
-                self.receive(message)
+                self.receive(message: message)
             }
         } else {
             // FIXME: send error report
@@ -36,12 +36,12 @@ open class Actor {
 
     }
     
-    func put(_ message:Any, after:Int64) {
-        let when = DispatchTime.now() + Double(after * 1000000) / Double(NSEC_PER_SEC)
+    func put(message: Any, milliseconds: Int64) {
+        let when = DispatchTime.now() + Double(milliseconds * 1000000) / Double(NSEC_PER_SEC)
         
         if let dispatchQueue = self.dispatchQueue {
             dispatchQueue.asyncAfter(deadline: when) {
-                self.receive(message)
+                self.receive(message: message)
             }
         } else {
             // FIXME: send error report
@@ -52,14 +52,21 @@ open class Actor {
     /**
         No-op function which eats unhandled message.
     */
-    open func unhandled(_ message:Any) {
-    }
-    
-    // You shall override this function
-    open func receive(_ message:Any) {
+    open func unhandled(message: Any) {
         
     }
     
+    // You shall override this function
+    open func receive(message: Any) {
+        
+    }
+    
+}
+
+open class ActorUI : Actor {
+    public required init(actorSystem: ActorSystem) {
+        super.init(actorSystem: actorSystem)
+    }
 }
 
 open class MainThreadActor : Actor {
@@ -67,21 +74,21 @@ open class MainThreadActor : Actor {
 }
 
 open class ActorRef : CustomStringConvertible {
-    open let actor:Actor
-    var queue:DispatchQueue
+    open let actor: Actor
+    var queue: DispatchQueue
     
     open var description: String { get {
         return "<ActorRef name:"+actor.name + ">"
         }
     }
     
-    open var name:String {
+    open var name: String {
         get {
             return actor.name
         }
     }
     
-    init(actor:Actor, queue:DispatchQueue) {
+    init(actor: Actor, queue: DispatchQueue) {
         self.actor = actor
         self.actor.dispatchQueue = queue
         self.queue = queue
@@ -92,8 +99,8 @@ open class ActorRef : CustomStringConvertible {
     
         :param: message Message object (or structure) to be sent.
     */
-    open func tell(_ message:Any) {
-        self.actor.put(message)
+    open func tell(message: Any) {
+        self.actor.put(message: message)
     }
 
     /**
@@ -104,31 +111,30 @@ open class ActorRef : CustomStringConvertible {
         :param: after Delay in milliseconds.
 
     */
-    open func tell(_ message:Any, after:Int64) {
-        self.actor.put(message, after: after)
+    open func tell(message: Any, milliseconds: Int64) {
+        self.actor.put(message: message, milliseconds: milliseconds)
     }
 }
 
 open class ActorSystem {
     
-    var allActors:Dictionary<String, ActorRef> = [:]
+    var typeToActorRefDictionary = [String: ActorRef]()
 
     public init() {
     }
     
-    func actorOfInstance(_ actor:Actor) -> ActorRef {
+    func actorOfInstance(actor: Actor) -> ActorRef {
         switch(actor) {
-        case is MainThreadActor:
-            return ActorRef(actor: actor, queue: DispatchQueue.main)
-        default:
-            let name = "net.japko.actors." + actor.name
-            
-            // init(label: String, qos: DispatchQoS = default, attributes: DispatchQueue.Attributes = default, autoreleaseFrequency: DispatchQueue.AutoreleaseFrequency = default, target: DispatchQueue? = default)
-            let queue = DispatchQueue(label: name, attributes: [])
-            
-            return ActorRef(actor: actor, queue:queue)
-            
-        }
+            case is MainThreadActor:
+                return ActorRef(actor: actor, queue: DispatchQueue.main)
+            default:
+                let name = "root.user." + actor.name
+                
+                // init(label: String, qos: DispatchQoS = default, attributes: DispatchQueue.Attributes = default, autoreleaseFrequency: DispatchQueue.AutoreleaseFrequency = default, target: DispatchQueue? = default)
+                let queue = DispatchQueue(label: name, attributes: [])
+                
+                return ActorRef(actor: actor, queue: queue)
+            }
     }
     
     /**
@@ -136,24 +142,23 @@ open class ActorSystem {
     
         :param: actorType Class of actor, should be child of Actor.
     */
-    open func actorOf<T : Actor>(_ actorType:T.Type) -> ActorRef {
+    open func actorOf<T: Actor>(actor: T) -> ActorRef {
         let typeName = NSStringFromClass(T.self)
         
-        if let cachedActor = allActors[typeName] {
-            return cachedActor
+        if let actorRef = typeToActorRefDictionary[typeName] {
+            return actorRef
         } else {
-            let actor:T = actorType.init(self)
-            let reference = actorOfInstance(actor)
-            allActors[typeName] = reference
-            return reference
+            let actorRef = actorOfInstance(actor: actor)
+            typeToActorRefDictionary[typeName] = actorRef
+            return actorRef
         }
     }
 }
 
 infix operator  !
 
-public func ! (left:ActorRef, right:Any) -> Void {
-    left.tell(right)
+public func ! (actorRef:ActorRef, message:Any) -> Void {
+    actorRef.tell(message: message)
 }
 
 

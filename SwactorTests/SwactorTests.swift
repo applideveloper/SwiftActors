@@ -21,30 +21,27 @@ class SwactorTests: XCTestCase {
         super.tearDown()
     }
     
-    
-    
     struct CoffeeOrder {
         var name:String
         var expect:XCTestExpectation?
     }
     
     class Barista : Actor {
-        let cashier:ActorRef
+        var cashier: ActorRef
         
-        required init(_ ctx: ActorSystem) {
-            cashier = ctx.actorOf(Cashier.self)
-            super.init(ctx)
+        required init(actorSystem: ActorSystem) {
+            cashier = actorSystem.actorOf(actor: Cashier.init(actorSystem: actorSystem))
+            super.init(actorSystem: actorSystem)
         }
         
-        override func receive(_ message: Any) {
+        override func receive(message: Any) {
             switch message {
-                
-            case let order as CoffeeOrder :
-                cashier ! Bill(amount: 200, expect:order.expect)
-                NSLog ("I am making coffee \(order.name)")
-//                order.expect.fulfill()
-            default:
-                unhandled(message)
+                case let order as CoffeeOrder :
+                    cashier ! Bill(amount: 200, expect:order.expect)
+                    NSLog ("I am making coffee \(order.name)")
+                    order.expect?.fulfill()
+                default:
+                    unhandled(message: message)
             }
         }
     }
@@ -56,55 +53,73 @@ class SwactorTests: XCTestCase {
     
     class Cashier : Actor {
 
-        required init(_ ctx: ActorSystem) {
-            super.init(ctx)
+        required init(actorSystem: ActorSystem) {
+            super.init(actorSystem: actorSystem)
         }
         
-        override func receive(_ message: Any) {
+        override func receive(message: Any) {
             switch message {
             case let bill as Bill :
                 NSLog("Billing $\(bill.amount)")
                 bill.expect?.fulfill()
                 
             default:
-                unhandled(message)
+                unhandled(message: message)
             }
         }
-        
     }
     
     func testBasic() {
         
-        let acsys = ActorSystem()
+        let actorSystem = ActorSystem()
         
-        let clintEastwood:ActorRef = acsys.actorOf(Barista.self)
+        let barista: ActorRef = actorSystem.actorOf(
+            actor: Barista.init(actorSystem: actorSystem)
+        )
         
-        clintEastwood ! CoffeeOrder(name:"Latte", expect:expectation(description: "Cashier acted"))
+        barista ! CoffeeOrder(
+            name:"Latte",
+            expect:expectation(description: "Cashier acted")
+        )
         
-        waitForExpectations(timeout: 10.0, handler: { error in
+        waitForExpectations(timeout: 10.0, handler: { (error: Error?) in
             NSLog("Done")
-            if ((error) != nil) {
-                print("There was error \(error.debugDescription)")
+            if let error = error {
+                print("There was error \(error.localizedDescription)")
+            } else {
+                
             }
         })
         
     }
     
     func testActorReuse() {
-        let acsys = ActorSystem()
+        let actorSystem = ActorSystem()
         
-        let actor1:ActorRef = acsys.actorOf(Barista.self)
-        let actor2:ActorRef = acsys.actorOf(Barista.self)
+        let barista1: ActorRef = actorSystem.actorOf(
+            actor: Barista.init(actorSystem: actorSystem)
+        )
+        let barista2: ActorRef = actorSystem.actorOf(
+            actor: Barista.init(actorSystem: actorSystem)
+        )
         
-        XCTAssertTrue(actor1 === actor2, "Should be same instance")
+        XCTAssertTrue(barista1 === barista2, "Should be same instance")
     }
     
     func testDelayedMessage() {
-        let acsys = ActorSystem()
+        let actorSystem = ActorSystem()
         
-        let actor1:ActorRef = acsys.actorOf(Cashier.self)
+        let cashier: ActorRef = actorSystem.actorOf(
+            actor: Cashier.init(actorSystem: actorSystem)
+        )
         
-        actor1.tell(Bill(amount: 100, expect: expectation(description: "Called after two seconds")), after: 2000)
+        cashier.tell(
+            message: Bill(
+                amount: 100,
+                expect: expectation(description: "Called after two seconds")
+            ),
+            milliseconds: 2000
+        )
         
         waitForExpectations(timeout: 3.0, handler: { error in
             NSLog("Done waiting for delayed message")
