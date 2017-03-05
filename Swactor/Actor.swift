@@ -66,12 +66,6 @@ open class MainThreadActor : Actor {
     
 }
 
-open class ActorUI : Actor {
-    required public init(_ ctx: ActorSystem) {
-        super.init(ctx)
-    }
-}
-
 open class ActorRef : CustomStringConvertible {
     open let actor:Actor
     var queue:DispatchQueue
@@ -113,7 +107,6 @@ open class ActorRef : CustomStringConvertible {
     open func tell(_ message:Any, after:Int64) {
         self.actor.put(message, after: after)
     }
-    
 }
 
 open class ActorSystem {
@@ -155,9 +148,6 @@ open class ActorSystem {
             return reference
         }
     }
-    
-    
-    
 }
 
 infix operator  !
